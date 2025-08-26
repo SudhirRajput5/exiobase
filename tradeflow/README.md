@@ -10,6 +10,8 @@ Trade is traditionally called flow, but the term lacks clarity when relating ann
 
 Later, the 6-character "commodity" sectors can reside in the 5-character "trade" tables, or in tables starting with "commodity".
 
+Combing state-to-state consumption: [Exiobase plus BEA](bea)
+
 ## Processing Command
 
 To generate CSV file output configured in config.yaml, run the automated batch processing for [our related project](https://github.com/ModelEarth/projects/issues/30):

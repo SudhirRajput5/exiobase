@@ -11,10 +11,24 @@ Create a comprehensive US-BEA data integration system that combines Exiobase MRI
 
 ## Configuration Settings
 
+Get your [BEA API Key](https://apps.bea.gov/api/signup/)
+
 **Year**: 2019 (from config.yaml)
 **Country**: US (from config.yaml) 
 **Trade Flows**: domestic, imports, exports (from config.yaml)
 **Base Architecture**: Leverage existing exiobase/tradeflow preprocessing and Exiobase data downloads
+
+**Usage**:
+```bash
+# Using BEA API key from webroot/.env file
+python us-bea.py
+
+# Using command line API key
+python us-bea.py --bea-key YOUR_API_KEY
+
+# Get help on available parameters
+python us-bea.py --help
+```
 
 ## Data Sources Integration
 
@@ -30,7 +44,7 @@ Create a comprehensive US-BEA data integration system that combines Exiobase MRI
   - International Trade in Goods and Services (includes state-level export data)
   - Input-Output Tables (industry relationships)
   - Import/Export Price Indexes
-- **Authentication**: BEA API key (store in separate config file, excluded by .gitignore)
+- **Authentication**: Store you BEA API key in an .env file excluded by .gitignore
 
 ### 3. FEDEFL Integration
 - **Source**: Federal LCA Commons Elementary Flow List
