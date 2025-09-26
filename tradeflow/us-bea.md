@@ -185,18 +185,21 @@ year/[year]/
 ├── US/
 │   ├── domestic/
 │   │   ├── trade.csv                    # Base trade flows
+│   │   ├── trade_factor.csv             # Environmental coefficients
 │   │   ├── bea_trade_detail.csv        # BEA-enhanced trade details
 │   │   ├── state_trade_flows.csv       # State-level flows  
 │   │   ├── trade_factor_bea.csv        # BEA-specific coefficients
 │   │   └── state_industry_impacts.csv  # State economic impacts
 │   ├── imports/
 │   │   ├── trade.csv
+│   │   ├── trade_factor.csv             # Environmental coefficients
 │   │   ├── bea_trade_detail.csv
 │   │   ├── import_dependency.csv       # Import analysis
 │   │   ├── trade_price_indices.csv     # Economic indicators
 │   │   └── trade_factor_bea.csv
 │   └── exports/
 │       ├── trade.csv  
+│       ├── trade_factor.csv             # Environmental coefficients
 │       ├── bea_trade_detail.csv
 │       ├── export_competitiveness.csv  # Export analysis
 │       ├── state_trade_flows.csv
