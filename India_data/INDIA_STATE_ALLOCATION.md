@@ -49,7 +49,7 @@ Place your India data files in the `India_data` folder (or specify with `--data-
    - `GSDP_State_wise.csv`
    - `GSDP.csv`
    - `state_gsdp.csv`
-   
+
    Expected columns: State name, GSDP value (for target year or 2011-12 series)
 
 2. **GSVA/NSVA Data** (one of):
@@ -58,7 +58,7 @@ Place your India data files in the `India_data` folder (or specify with `--data-
    - `GSVA.csv`
    - `NSVA.csv`
    - `state_sector_value_added.csv`
-   
+
    Expected columns: State name, Sector/Activity name, Value added
 
 3. **SUT Data** (one of):
@@ -67,7 +67,7 @@ Place your India data files in the `India_data` folder (or specify with `--data-
    - `Input_Output_Tables.csv`
    - `IOT.csv`
    - `national_sut.csv`
-   
+
    Expected columns: From sector, To sector, Transaction value
 
 ### Optional Files:
@@ -77,7 +77,7 @@ Place your India data files in the `India_data` folder (or specify with `--data-
    - `Export_Commodity_wise.csv`
    - `Exports.csv`
    - `export_data.csv`
-   
+
    Expected columns: HS code (2-digit or 6-digit), Export value
    - HS codes are automatically normalized to 2-digit format for matching
 
@@ -86,16 +86,16 @@ Place your India data files in the `India_data` folder (or specify with `--data-
    - `Import_Commodity_wise.csv`
    - `Imports.csv`
    - `import_data.csv`
-   
+
    Expected columns: HS code (2-digit or 6-digit), Import value
    - HS codes are automatically normalized to 2-digit format for matching
 
 6. **HS-EXIOBASE Mapping** (optional):
    - `HS_EXIOBASE_mapping.csv`
-   
+
    If not provided, a basic mapping will be created automatically.
    Expected columns: `hs_code` (2-digit), `hs_code_2digit`, `exiobase_sector`, `exiobase_product`, `confidence`
-   
+
    **Note**: The script supports 2-digit HS codes. If your data has 6-digit codes, they will be automatically converted to 2-digit for matching.
 
 ## Usage
