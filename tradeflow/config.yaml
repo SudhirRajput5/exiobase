@@ -3,6 +3,37 @@ TRADEFLOW: domestic,imports,exports
 YEAR: 2019
 COUNTRY:
   list: US
+NODES:
+  exiobase:
+    source_python: main.py
+    node_id: exiobase
+    order: 40
+    name: Exiobase Trade Flow
+    description: Runs exiobase international tradeflow processing.
+    link: exiobase/tradeflow
+    python_cmds: python main.py
+    output_path: ../../../trade-data/year/[year]/
+    output_info: Exiobase trade tables
+    folder_size: unknown
+    dependencies: "{detected_dependencies}"
+    data_sources: Exiobase MRIO
+    target_repo: trade-data
+  us_bea:
+    source_python: us-bea.py
+    node_id: us_bea
+    order: 45
+    parent_node: exiobase
+    name: US BEA Trade Flow
+    description: Runs exiobase US-BEA tradeflow integration and writes US trade-data outputs.
+    link: exiobase/tradeflow
+    python_cmds: python us-bea.py
+    output_path: ../../../trade-data/year/[year]/US/
+    output_info: US BEA enhanced trade tables
+    folder_size: unknown
+    dependencies: "{detected_dependencies}"
+    api_keys_required: BEA_API_KEY
+    data_sources: Exiobase MRIO,US BEA API,FEDEFL
+    target_repo: trade-data
 FOLDERS:
   base: ../../trade-data/year/{year}
   imports: ../../trade-data/year/{year}/{country}/imports
