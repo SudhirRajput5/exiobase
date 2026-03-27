@@ -43,10 +43,13 @@ Orchestrates all three tradeflows through a five-phase pipeline: base Exiobase d
 
 **Generates:**
 - `year/{year}/US/domestic/interstate.csv` — BEA-enhanced state-to-state trade detail
-- `year/{year}/US/domestic/interstate_factor.csv` — state-level flows with `factor_id` + `coefficient` from Exiobase S matrix (50 Selected Factors)
+- `year/{year}/US/domestic/interstate_factor.csv` — state-level flows with `factor_id` 
 - `year/{year}/US/domestic/interstate_factor_lg.csv` — same as above with all 721 factors (generated when `use_partial_factors_interstate: false` in `config.yaml`)
 - `year/{year}/US/domestic/trade_price_indices.csv` — trade price indices (currently empty; see [PLAN.md](PLAN.md))
 - `year/{year}/US/bea-report.md` — validation and processing summary report
+
+**Note:** interstate factor coefficient (from Exiobase S matrix) is not stored. coefficient can be derived by trade.amount divided by trade_factor.level
+
 
 ```bash
 # Run from exiobase/tradeflow/ using the ~/env Python environment
@@ -64,20 +67,16 @@ Orchestrates all three tradeflows through a five-phase pipeline: base Exiobase d
 
 <br>
 
-# To Investigate
+# Investigation in Progress
 
 From March 27, 2026 - AM
 
 - interstate_factor.csv — 68,465,474 rows, 120 Selected Factors (filtered down
  from 75,369,200 full-factor records)
-- Domestic processing took ~2.5 hours (9,234 seconds) - not yet confirmed, driven by the satellite
- disaggregation generating 75M state-to-state flow records before filtering to
- 68M
-- Imports and exports completed quickly (56s and 1,007s) using existing base
-data
+- Domestic processing took ~2.5 hours (9,234 seconds) - not yet confirmed, driven by the satellite disaggregation generating 75M state-to-state flow records before filtering to 68M
+- Imports and exports completed quickly (56s and 1,007s) using existing base data
 - BEA API was unavailable (empty response), so those enhancements were skipped
-- FEDEFL online source returned 404, so local fallback flows were used (24
-flows for domestic)
+- FEDEFL online source returned 404, so local fallback flows were used (24 flows for domestic)
 
 # Tables Name and Column Design
 
@@ -85,15 +84,13 @@ For .csv import to SQL
 
 CSV Output preview resides in [trade-data/year/2019/US/domestic](https://github.com/ModelEarth/trade-data/tree/main/year/2019/US/domestic)
 
-### Trade Tables
+See our [bea-report.md](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/bea-report.md) files for latest output overview.
 
-IMPORTANT: The following planned updates are changes to existing python processes. Don't add new processes that clean-up and rename within existing .csv files. Files will be generated as fresh output from the existing python. Don't add extra python; add options to existing processes.
+## interstate
 
-See our [BEA Python's Validation Readme](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/bea-report.md) for latest output overview.
-Active implementation tracking is now maintained in [PLAN.md](PLAN.md).
+The state-to-state `interstate` table is similar to the international `trade` table.
 
-Here are the table and column names we're aiming for:
-
+<!--
 #### [trade.csv](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/domestic/trade.csv) -  trade for country
 
 For entire country (split by domestic, import and export)
@@ -105,18 +102,25 @@ trade_id, year, region1, region2, industry1, industry2, amount
 
 Originates in our [international pull (from Exiobase)](../)
 
-Planning note (tracked in [PLAN.md](PLAN.md)): clarify whether the BEA pull makes use of the international `trade` table in domestic processing. The state-to-state `interstate` table is similar to the international `trade` table.
+The BEA pull probably does not use the international `trade` table in domestic processing. 
+-->
 
-
-#### interstate.csv - Rename from [bea_trade_detail.csv](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/domestic/bea_trade_detail.csv)
+interstate.csv - was [bea_trade_detail.csv](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/domestic/bea_trade_detail.csv)
 
 <!--
 trade_id, bea_commodity_code, bea_industry_code, trade_balance, import_value, export_value, trade_partner_state, transport_mode
 -->
-interstate_id, trade_id, year, region1 (NY), region2 (CA), industry1, industry2, amount,
+
+**columns**
+interstate_id, year, region1 (NY), region2 (CA), industry1, industry2, amount,
 commodity_code, industry_code, economic_multiplier
 
-**interstate.amount** is in million Euros (M EUR), consistent with `trade.amount` — both are sourced from the Exiobase Z matrix. The interstate amount is the national trade flow amount allocated to a specific state pair.
+**interstate.amount** is in million Euros (M EUR), consistent with `trade.amount` — both are sourced from the Exiobase Z matrix.
+
+The interstate.amount is tradeflow amount allocated to a specific state (region) pair and industry pair.
+
+
+## interstate_factor
 
 **interstate_factor.level** is in physical units — not Euros. The coefficient converts M EUR → a physical quantity whose unit varies by extension:
 
@@ -149,14 +153,21 @@ interstate_id, factor_id, level
 - `interstate_factor.trade_id` is omitted — the trade relation can be navigated as `interstate_factor → interstate → trade`, where `trade.region1` and `trade.region2` are the current country and `industry1`/`industry2` values align across the tables.
 - `interstate.region1` and `interstate.region2` are state codes only (e.g. `NY`, `CA`), not prefixed with `US-`.
 
-**120 Selected Factors vs All 721 Factors:**
+**50 Selected Factors vs All 721 Factors:**
 
-Each Exiobase sector has environmental coefficients for up to 721 stressors (air emissions, employment, energy, land, material, water). `interstate_factor.csv` keeps only the **120 Selected Factors** — the top 120 stressors ranked by absolute coefficient magnitude for each industry. This selection is performed independently per industry by loading the Exiobase S matrix, filtering entries whose absolute value meets `min_impact_threshold` (0.001), sorting descending by magnitude, and retaining the first `partial_factor_limit` (120) entries. Setting `use_partial_factors_interstate: false` in `config.yaml PROCESSING` generates the full **`interstate_factor_lg.csv`** (Large File — All 721 Factors) alongside the standard file.
+Each Exiobase sector has environmental coefficients for up to 721 stressors (air emissions, employment, energy, land, material, water). `interstate_factor.csv` keeps only the **50 Selected Factors** — the top 50 stressors ranked by absolute coefficient magnitude for each industry. This selection is performed independently per industry by loading the Exiobase S matrix, filtering entries whose absolute value meets `min_impact_threshold` (0.001), sorting descending by magnitude, and retaining the first `partial_factor_limit` (50) entries. Setting `use_partial_factors_interstate: false` in `config.yaml PROCESSING` generates the full **`interstate_factor_lg.csv`** (Large File — All 721 Factors) alongside the standard file.
+
+
+investigating if we need the rest...
+
+## trade_price_indices
 
 #### [trade_price_indices.csv](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/domestic/trade_price_indices.csv) (Economic Indicators)
 trade_id, import_price_index, export_price_index, exchange_rate, price_year, currency_adjustment_factor
 
 Open question (tracked in [PLAN.md](PLAN.md)): why is the table above empty?
+
+## industry (created by international tradeflow/main.py)
 
 #### [industry.csv](https://github.com/ModelEarth/trade-data/blob/main/year/2019/industry.csv) (industry category names)
 industry_id, name, category
@@ -165,6 +176,8 @@ Used by all countries and states. Industry Mapping - using existing file
 
 *Note: Resides at the root of the annual directory (year/2019/industry.csv) and is generated by other Python scripts in the tradeflow folder. The BEA process uses this existing file instead of generating a separate [bea_industry_mapping.csv file](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/domestic/bea_industry_mapping.csv) - delete that.  The 'name' column contains the exiobase sector names that were previously in the exiobase_sector column.*
 
+
+## trade_factor_bea
 
 #### trade_factor_bea.csv (BEA-Specific Factors)
 
@@ -178,6 +191,8 @@ Planned follow-up (tracked in [PLAN.md](PLAN.md)):
 When CSV file and column names are changed above, update [Sample Report from Output](../../../trade-data/bea-dashboard/).
 
 
+## flow
+
 #### [flow.csv](https://github.com/ModelEarth/trade-data/blob/main/year/2019/flow.csv) (FEDEFL Integration)
 flow_uuid, flowable, context, unit, compartment, flow_class, preferred, external_reference
 
@@ -187,23 +202,31 @@ The "[flow](https://github.com/ModelEarth/trade-data/blob/main/year/2019/flow.cs
 Probably NOT using here. Replaced by our "[factor](https://github.com/ModelEarth/trade-data/blob/main/year/2019/factor.csv)" table.
 And in our table naming, "[trade](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/domestic/trade.csv)" and "interstate" contain the trade flow.
 
+<br>
 
+# Analytical Enhancement Tables
 
-### Analytical Enhancement Tables
+IMPORTANT: These won't be needed in SQL since they can be table joins. Useful for .csv static reports.
 
-These won't be needed in SQL since they can be table joins.
+## export_competitiveness.
 
 #### [export_competitiveness.csv](https://raw.githubusercontent.com/ModelEarth/trade-data/refs/heads/main/year/2019/US/exports/export_competitiveness.csv) (Export Analysis)
 trade_id, revealed_comparative_advantage, export_sophistication_index, market_share, growth_rate
 
+## import_dependency
+
 #### [import_dependency.csv](https://raw.githubusercontent.com/ModelEarth/trade-data/refs/heads/main/year/2019/US/imports/import_dependency.csv) (Import Analysis)
 trade_id, import_penetration_ratio, supply_chain_vulnerability, alternative_suppliers, strategic_importance
+
+## state_industry_impacts
 
 #### [state_industry_impacts.csv](https://github.com/ModelEarth/trade-data/blob/main/year/2019/US/domestic/state_industry_impacts.csv) (State Economic Impact)
 
 region (US-AK), industry_code, direct_jobs, indirect_jobs, induced_jobs, total_output_impact, tax_revenue_impact
 
-## Output Structure
+<br>
+
+# Output Structure
 
 The "trade" tables are generated by tradeflow/main.py
 The "interstate" tables are generated by tradeflow/bea/main.py
@@ -215,7 +238,7 @@ year/[year]/
     │   ├── trade.csv                     # Base trade flows (pre-exists from ../trade.py)
     │   ├── trade_factor.csv              # Environmental coefficients (pre-exists)
     │   ├── interstate.csv                # BEA-enhanced state-to-state tradeflow
-    │   ├── interstate_factor.csv         # State-to-state factor (flow) level — 120 Selected Factors
+    │   ├── interstate_factor.csv         # State-to-state factor (flow) level — 50 Selected Factors
     │   ├── interstate_factor_lg.csv      # Same, all 721 factors (use_partial_factors_interstate: false)
     │   ├── state_industry_impacts.csv    # State economic impacts
     │   ├── trade_price_indices.csv       # Trade price indices (currently empty)
@@ -293,7 +316,7 @@ State-level trade flow disaggregation, employment and output impact calculations
 - Internal state employment multipliers and specialization weights (placeholder values; intended to be replaced with live BEA regional data)
 
 **Generates:**
-- `year/[year]/US/domestic/interstate_factor.csv` — state-to-state trade flows, 120 Selected Factors
+- `year/[year]/US/domestic/interstate_factor.csv` — state-to-state trade flows, 50 Selected Factors
   Columns: `interstate_id` (integer FK to interstate.csv), `factor_id`, `level` (2dp)
 - `year/[year]/US/domestic/interstate_factor_lg.csv` — same with all 721 factors; generated when `use_partial_factors_interstate: false` in `config.yaml`
 - `year/[year]/US/domestic/state_industry_impacts.csv` — employment and output impacts aggregated by destination region and industry
