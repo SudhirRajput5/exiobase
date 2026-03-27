@@ -6,7 +6,30 @@ The US-BEA data integration here combines Exiobase MRIO data with US Bureau of E
 
 The following US BEA integration with Exiobase international trade flow data uses the [industry.csv file](https://github.com/ModelEarth/trade-data/blob/main/year/2019/industry.csv) from the separate Exiobase pull of US domestic commodity flow. Industry columns are: industry_id and name (the exiobase sector information).
 
+The term "level" is instead of "flow_value" or "impact_value".
+We have "trade_factor.level" (international) and "interstate_factor.level" (state-to-state)
+
+**Units**
+
+Each factor level is one of 6 units. (These apply to all 721 factors.)
+
+- air_emissions (kg)
+- employment (1000 persons)
+- energy (terajoules)
+- land (km²)
+- material (kilotonnes)
+- water (Mm³ million cubic metres)
+
+We use 50 of 721 factors per interstate trade.
+(120 factors resulted in a 5 GB interstate_factor file.)
+
+We don't save a "coefficient" column since it can be derived from "trade.amount" divided by the "trade_factor.level")
+
+Both trade.amount and interstate.amount are in Euros to sync with Exiobase.
+TO DO: We need to add a euro_dollar lookup by year.
+
 ### Reports
+- [Sankey](../../../profile/trade/map/sankey.html)
 - [Sample Report from Output](../../../trade-data/bea-dashboard/)
 - State-to-state domestic trade flows (upcoming)
 - State export competitiveness analysis (upcoming)
