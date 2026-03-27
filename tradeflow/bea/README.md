@@ -51,7 +51,7 @@ Before running, ensure the following exist:
 - `../../trade-data/year/{year}/US/domestic/trade.csv` — run `../trade.py` for domestic flow, or pass `--force-regen`
 - `../../trade-data/year/{year}/US/imports/trade.csv` — run `../trade.py` for imports flow
 - `../../trade-data/year/{year}/US/exports/trade.csv` — run `../trade.py` for exports flow
-- `BEA_API_KEY` in `webroot/.env` (or pass via `--bea-key`)
+- `BEA_API_KEY` in `webroot/.env` (or pass via `--bea-key`) — optional; without it, `commodity_code`, `industry_code`, and `economic_multiplier` fall back to empty/default values
 
 ### Primary Module: main.py
 
@@ -284,27 +284,34 @@ year/[year]/
 
 # Supporting Modules
 
-All 3 are invoked by beab/main.py
+All 3 are invoked by bea/main.py
 
 ## 1. main_api_client.py
 
-BEA API authentication and data retrieval with rate limiting, response caching, and column standardization. Called during Phase 2 (BEA API Enhancement) of each tradeflow.
+BEA API authentication and data retrieval with rate limiting, response caching, and column standardization.
+Called during Phase 2 (BEA API Enhancement) of each tradeflow.
 
 **API Endpoint**: https://apps.bea.gov/api/data/
 **Datasets fetched:**
-- `IntlServTrade` — International Trade in Goods and Services (imports, exports, and state-level exports)
-- `InputOutput` — Industry input-output tables (`Summary` or `Detail`)
-- `GDPbyIndustry` — GDP by industry
+- IntlServTrade — International Trade in Goods and Services (imports, exports, and state-level exports)
+- InputOutput — Industry input-output tables (`Summary` or `Detail`)
+- GDPbyIndustry — GDP by industry
 
-**BEA-sourced columns in `interstate.csv`** (intended; merge into output is pending full implementation):
+**BEA-sourced columns in `interstate.csv`**
+
+These columns are in `interstate.csv` (not `interstate_factor.csv`, which only has `interstate_id, factor_id, level`).
+
+These columns are populated with BEA API data when available. When the API returns no data, `--use-bea-placeholder` allows the run to continue using fallback values; without it, rows dependent on BEA data are omitted.
+
+Fallback values (used only with `--use-bea-placeholder` when API is unavailable): `import_value`, `export_value`, and `trade_balance` fall back to `interstate.amount` (derived from `trade.csv amount`); `commodity_code`, `industry_code`, and `economic_multiplier` fall back to static defaults.
 
 | Column | Tradeflow | BEA dataset | Fallback when API unavailable |
 |---|---|---|---|
 | `commodity_code` | imports, exports | IntlServTrade | `""` (empty string) |
 | `industry_code` | imports, exports | IntlServTrade | `""` (empty string) |
-| `trade_balance` | imports, exports | IntlServTrade | `0.0` |
-| `import_value` | imports | IntlServTrade | copied from `amount` |
-| `export_value` | exports | IntlServTrade | copied from `amount` |
+| `trade_balance` | imports, exports | IntlServTrade | copied from `trade.csv amount` |
+| `import_value` | imports | IntlServTrade | copied from `trade.csv amount` |
+| `export_value` | exports | IntlServTrade | copied from `trade.csv amount` |
 | `economic_multiplier` | domestic | InputOutput | `1.0` |
 
 Note: The BEA API responses are fetched and cached but the per-row merge into `interstate.csv` columns is not yet fully implemented — all rows currently receive the fallback values above regardless of API availability.
@@ -453,3 +460,13 @@ The 2012 NAICS Codes 335221, 335222, 335224 and 335228 for Household Cooking App
 
 Aluminum Manufacturing:
 The 2012 NAICS Code 331313 was split into 2017 NAICS 331313 and 33131B for reclassification in the aluminum manufacturing sector, where CEDA retains the older detailed classification while USEEIO 2017 uses a modified code (33131B).
+
+## For other Countries
+
+  - Canada → Statistics Canada
+  - EU countries → Eurostat (NUTS regional data)
+  - China → National Bureau of Statistics
+  - Germany, France, etc. → Each has its own regional accounts
+
+The state disaggregation method (allocating national Exiobase flows using BEA employment/output weights) could serve as a template for other countries if their statistical agency data were available.
+

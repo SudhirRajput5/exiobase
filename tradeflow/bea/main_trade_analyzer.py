@@ -434,165 +434,106 @@ class StateTradeAnalyzer:
         
         return impacts_df
     
-    def analyze_export_competitiveness(self, export_flows_df, bea_exports_data=None):
-        """Analyze export competitiveness by state and industry"""
-        print("    📈 Analyzing export competitiveness...")
-        
-        if export_flows_df.empty:
+    def analyze_export_competitiveness(self, interstate_df):
+        """
+        State-level export competitiveness from interstate.csv.
+
+        interstate_df columns: interstate_id, region1 (origin state), region2 (destination state),
+                               industry1, amount (M EUR)
+
+        Metrics per interstate_id:
+          state_industry_exports_total : M EUR sent by this state+industry to all destination states
+          state_destination_share      : this row's amount / state+industry total (0–1)
+          state_export_intensity       : state+industry total / all interstate exports (0–1)
+          state_destination_count      : distinct destination states for this state+industry
+          state_export_concentration   : HHI of destinations for this state+industry (0=dispersed, 1=one)
+        """
+        print("    📈 Analyzing state export competitiveness from interstate data...")
+
+        if interstate_df.empty:
             return pd.DataFrame()
-        
-        competitiveness_data = []
-        
-        # Group by industry for analysis
-        industry_groups = export_flows_df.groupby(['industry1', 'region2'])
-        
-        for (industry, destination), group in industry_groups:
-            total_exports = group['amount'].sum()
-            
-            # Calculate competitiveness metrics
-            # Revealed Comparative Advantage (simplified)
-            rca = self._calculate_rca(industry, destination, total_exports)
-            
-            # Export sophistication index (simplified)
-            sophistication = self._calculate_sophistication(industry)
-            
-            # Market share (simplified)
-            market_share = self._calculate_market_share(industry, destination, total_exports)
-            
-            # Growth rate (would need historical data - using placeholder)
-            growth_rate = np.random.normal(0.02, 0.05)  # Placeholder
-            
-            for _, row in group.iterrows():
-                competitiveness_data.append({
-                    'trade_id': row.get('trade_id', ''),
-                    'revealed_comparative_advantage': rca,
-                    'export_sophistication_index': sophistication,
-                    'market_share': market_share,
-                    'growth_rate': growth_rate
-                })
-        
-        competitiveness_df = pd.DataFrame(competitiveness_data)
-        
-        # Ensure trade_id column is properly named and positioned first
-        if not competitiveness_df.empty:
-            cols = ['trade_id'] + [col for col in competitiveness_df.columns if col != 'trade_id']
-            competitiveness_df = competitiveness_df[cols]
-        
-        print(f"      ✅ Analyzed competitiveness for {len(competitiveness_df)} export flows")
-        
-        return competitiveness_df
-    
-    def analyze_import_dependency(self, import_flows_df, bea_imports_data=None):
-        """Analyze import dependency and supply chain vulnerabilities"""
-        print("    🔗 Analyzing import dependencies...")
-        
-        if import_flows_df.empty:
+
+        total = interstate_df['amount'].sum()
+
+        def _hhi(amounts):
+            t = amounts.sum()
+            if t == 0:
+                return 0.0
+            s = amounts / t
+            return round(float((s ** 2).sum()), 6)
+
+        state_industry_stats = interstate_df.groupby(['region1', 'industry1']).agg(
+            state_industry_exports_total=('amount', 'sum'),
+            state_destination_count=('region2', 'nunique'),
+        )
+        state_industry_hhi = (
+            interstate_df.groupby(['region1', 'industry1'])['amount']
+            .apply(_hhi)
+            .rename('state_export_concentration')
+        )
+        state_industry_stats = state_industry_stats.join(state_industry_hhi).reset_index()
+
+        result = interstate_df[['interstate_id', 'region1', 'industry1', 'amount']].merge(
+            state_industry_stats, on=['region1', 'industry1']
+        )
+        result['state_destination_share'] = (result['amount'] / result['state_industry_exports_total']).round(6)
+        result['state_export_intensity'] = (result['state_industry_exports_total'] / total).round(6)
+        result['state_industry_exports_total'] = result['state_industry_exports_total'].round(2)
+
+        out = result[['interstate_id', 'state_industry_exports_total', 'state_destination_share',
+                      'state_export_intensity', 'state_destination_count', 'state_export_concentration']]
+        print(f"      ✅ State export competitiveness: {len(out)} rows, {interstate_df['region1'].nunique()} states")
+        return out
+
+    def analyze_import_dependency(self, interstate_df):
+        """
+        State-level import dependency from interstate.csv.
+
+        Treats inbound interstate flows (region2 = destination state) as state imports.
+
+        Metrics per interstate_id:
+          state_industry_imports_total : M EUR received by this state+industry from all origin states
+          state_source_share           : this row's amount / state+industry total (0–1)
+          state_import_intensity       : state+industry total / all interstate imports (0–1)
+          state_supplier_count         : distinct origin states supplying this state+industry
+          state_import_concentration   : HHI of origins (higher = more dependent on fewer states)
+        """
+        print("    🔗 Analyzing state import dependency from interstate data...")
+
+        if interstate_df.empty:
             return pd.DataFrame()
-        
-        dependency_data = []
-        
-        # Group by industry and origin
-        industry_groups = import_flows_df.groupby(['industry2', 'region1'])
-        
-        for (industry, origin), group in industry_groups:
-            total_imports = group['amount'].sum()
-            
-            # Calculate dependency metrics
-            penetration_ratio = self._calculate_import_penetration(industry, total_imports)
-            vulnerability = self._assess_supply_chain_vulnerability(origin, industry)
-            alternative_suppliers = self._count_alternative_suppliers(industry, origin, import_flows_df)
-            strategic_importance = self._assess_strategic_importance(industry)
-            
-            for _, row in group.iterrows():
-                dependency_data.append({
-                    'trade_id': row.get('trade_id', ''),
-                    'import_penetration_ratio': penetration_ratio,
-                    'supply_chain_vulnerability': vulnerability,
-                    'alternative_suppliers': alternative_suppliers,
-                    'strategic_importance': strategic_importance
-                })
-        
-        dependency_df = pd.DataFrame(dependency_data)
-        
-        # Ensure trade_id column is properly named and positioned first
-        if not dependency_df.empty:
-            cols = ['trade_id'] + [col for col in dependency_df.columns if col != 'trade_id']
-            dependency_df = dependency_df[cols]
-        
-        print(f"      ✅ Analyzed dependencies for {len(dependency_df)} import flows")
-        
-        return dependency_df
-    
-    def _calculate_rca(self, industry, destination, exports):
-        """Calculate Revealed Comparative Advantage"""
-        # Simplified RCA calculation
-        # In practice: (Xij/Xit) / (Xwj/Xwt)
-        base_rca = np.random.uniform(0.5, 2.0)  # Placeholder
-        return base_rca
-    
-    def _calculate_sophistication(self, industry):
-        """Calculate export sophistication index"""
-        sophistication_map = {
-            'manufacturing': 0.8,
-            'technology': 0.9,
-            'agriculture': 0.4,
-            'mining': 0.3,
-            'services': 0.6
-        }
-        
-        category = self._categorize_industry(industry)
-        return sophistication_map.get(category, 0.5)
-    
-    def _calculate_market_share(self, industry, destination, exports):
-        """Calculate market share"""
-        # Simplified market share (would need total market data)
-        return min(exports / 10000000, 0.5)  # Cap at 50%
-    
-    def _calculate_import_penetration(self, industry, imports):
-        """Calculate import penetration ratio"""
-        # Simplified: imports / (domestic production + imports)
-        # Using placeholder domestic production values
-        domestic_production = imports * np.random.uniform(2, 10)
-        return imports / (domestic_production + imports)
-    
-    def _assess_supply_chain_vulnerability(self, origin, industry):
-        """Assess supply chain vulnerability"""
-        # Risk factors: geographic concentration, political stability, etc.
-        risk_countries = ['CN', 'RU', 'IR']  # Example high-risk countries
-        base_risk = 0.3
-        
-        if origin in risk_countries:
-            base_risk = 0.8
-        
-        # Industry-specific adjustments
-        critical_industries = ['technology', 'pharmaceuticals', 'defense']
-        if self._categorize_industry(industry) in critical_industries:
-            base_risk *= 1.5
-        
-        return min(base_risk, 1.0)
-    
-    def _count_alternative_suppliers(self, industry, current_origin, all_imports_df):
-        """Count alternative suppliers for this industry"""
-        industry_imports = all_imports_df[all_imports_df['industry2'] == industry]
-        alternative_origins = industry_imports['region1'].unique()
-        
-        # Exclude current origin
-        alternatives = [origin for origin in alternative_origins if origin != current_origin]
-        return len(alternatives)
-    
-    def _assess_strategic_importance(self, industry):
-        """Assess strategic importance of industry"""
-        strategic_industries = {
-            'technology': 0.9,
-            'pharmaceuticals': 0.9, 
-            'defense': 1.0,
-            'energy': 0.8,
-            'agriculture': 0.7,
-            'manufacturing': 0.6
-        }
-        
-        category = self._categorize_industry(industry)
-        return strategic_industries.get(category, 0.4)
+
+        total = interstate_df['amount'].sum()
+
+        def _hhi(amounts):
+            t = amounts.sum()
+            if t == 0:
+                return 0.0
+            s = amounts / t
+            return round(float((s ** 2).sum()), 6)
+
+        state_industry_stats = interstate_df.groupby(['region2', 'industry1']).agg(
+            state_industry_imports_total=('amount', 'sum'),
+            state_supplier_count=('region1', 'nunique'),
+        )
+        state_industry_hhi = (
+            interstate_df.groupby(['region2', 'industry1'])['amount']
+            .apply(_hhi)
+            .rename('state_import_concentration')
+        )
+        state_industry_stats = state_industry_stats.join(state_industry_hhi).reset_index()
+
+        result = interstate_df[['interstate_id', 'region2', 'industry1', 'amount']].merge(
+            state_industry_stats, on=['region2', 'industry1']
+        )
+        result['state_source_share'] = (result['amount'] / result['state_industry_imports_total']).round(6)
+        result['state_import_intensity'] = (result['state_industry_imports_total'] / total).round(6)
+        result['state_industry_imports_total'] = result['state_industry_imports_total'].round(2)
+
+        out = result[['interstate_id', 'state_industry_imports_total', 'state_source_share',
+                      'state_import_intensity', 'state_supplier_count', 'state_import_concentration']]
+        print(f"      ✅ State import dependency: {len(out)} rows, {interstate_df['region2'].nunique()} states")
+        return out
     
     def create_state_reference_data(self, output_path):
         """Create state reference data files"""

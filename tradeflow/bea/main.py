@@ -35,7 +35,7 @@ from main_trade_analyzer import StateTradeAnalyzer
 from main_fedefl_integration import FEDEFLIntegrator
 
 class USBEATradeFlow:
-    def __init__(self, bea_api_key=None, force_regeneration=False):
+    def __init__(self, bea_api_key=None, force_regeneration=False, use_bea_placeholder=False):
         # Load configuration
         self.config = load_config()
         
@@ -44,6 +44,7 @@ class USBEATradeFlow:
         
         # Optimization settings
         self.force_regeneration = force_regeneration
+        self.use_bea_placeholder = use_bea_placeholder
         
         # Initialize validation tracking
         self.validation_issues = []
@@ -86,10 +87,11 @@ class USBEATradeFlow:
             print("Loaded BEA API key from system environment")
             return env_key
 
-        print("BEA API key not found — BEA API enhancement will be skipped.")
-        print("To enable: add BEA_API_KEY=your_key to webroot/docker/.env or webroot/.env")
-        print("Register at https://apps.bea.gov/api/signup/")
-        return None
+        raise SystemExit(
+            "BEA_API_KEY not found.\n"
+            "Add BEA_API_KEY=your_key to webroot/docker/.env or webroot/.env\n"
+            "Register at https://apps.bea.gov/api/signup/"
+        )
     
     def process_all_tradeflows(self):
         """Main processing pipeline for enhanced BEA trade analysis"""
@@ -235,8 +237,7 @@ class USBEATradeFlow:
             self._fetch_bea_exports_data()
         elif tradeflow == 'domestic':
             self._fetch_bea_domestic_data()
-            # interstate.csv for domestic is generated in Phase 3 from state-pair disaggregation
-            self._create_interstate_csvfiles()
+            # interstate.csv for domestic is written in Phase 3 with BEA columns merged in
         
     def _fetch_bea_imports_data(self):
         """Fetch BEA imports data from API"""
@@ -426,6 +427,11 @@ class USBEATradeFlow:
 
                 # Use US state analyzer to disaggregate flows
                 bea_data = getattr(self, 'bea_domestic_data', pd.DataFrame())
+                if bea_data.empty and not self.use_bea_placeholder:
+                    print("    ⛔ BEA state data unavailable — skipping state disaggregation.")
+                    print("    interstate.csv and interstate_factor.csv will not be generated.")
+                    return
+
                 state_flows = self.state_analyzer.disaggregate_domestic_flows(
                     base_trade, bea_data
                 )
@@ -452,7 +458,7 @@ class USBEATradeFlow:
                     unique_pairs.insert(0, 'interstate_id_int', range(1, len(unique_pairs) + 1))
                     id_map = dict(zip(unique_pairs['interstate_id'], unique_pairs['interstate_id_int']))
 
-                    # Overwrite interstate.csv with proper state-pair rows and integer interstate_id
+                    # Build interstate.csv with state-pair rows and BEA columns merged in
                     interstate_df = pd.DataFrame({
                         'interstate_id': unique_pairs['interstate_id_int'],
                         'trade_id':      unique_pairs['trade_id'],
@@ -463,6 +469,18 @@ class USBEATradeFlow:
                         'state_industry_code': unique_pairs['state_industry_code'],
                         'amount':        unique_pairs['level'],
                     })
+
+                    # Merge BEA-sourced columns from domestic data if available
+                    bea_domestic = getattr(self, 'bea_domestic_data', pd.DataFrame())
+                    if not bea_domestic.empty and 'trade_id' in bea_domestic.columns:
+                        bea_cols = [c for c in ['trade_id', 'commodity_code', 'industry_code', 'economic_multiplier']
+                                    if c in bea_domestic.columns]
+                        interstate_df = interstate_df.merge(bea_domestic[bea_cols], on='trade_id', how='left')
+                    elif self.use_bea_placeholder:
+                        interstate_df['commodity_code'] = ''
+                        interstate_df['industry_code'] = ''
+                        interstate_df['economic_multiplier'] = 1.0
+
                     interstate_df.to_csv(output_path / 'interstate.csv', index=False)
                     print(f"    ✅ Created interstate.csv ({len(interstate_df)} state-pair rows)")
 
@@ -532,75 +550,60 @@ class USBEATradeFlow:
             self.config['TRADEFLOW'] = original_tradeflow
     
     def _analyze_state_export_competitiveness(self):
-        """Analyze US state export competitiveness"""
-        print("  Analyzing US export competitiveness...")
-        
-        # Update config for current tradeflow
+        """State export competitiveness from domestic interstate.csv (region1=origin state)."""
+        print("  Analyzing US state export competitiveness from interstate data...")
+
         original_tradeflow = self.config['TRADEFLOW']
-        self.config['TRADEFLOW'] = self.current_tradeflow
-        
+        self.config['TRADEFLOW'] = 'domestic'
+
         try:
-            # Load export trade data
-            trade_file_str = get_file_path(self.config, 'industryflow')
-            trade_file = Path(trade_file_str)
-            
-            if trade_file.exists():
-                export_trade = pd.read_csv(trade_file)
-                
-                # Use US state analyzer for competitiveness analysis
-                bea_data = getattr(self, 'bea_exports_data', pd.DataFrame())
-                competitiveness = self.state_analyzer.analyze_export_competitiveness(
-                    export_trade, bea_data
-                )
-                
-                # Save results
+            trade_file = Path(get_file_path(self.config, 'industryflow'))
+            interstate_file = trade_file.parent / 'interstate.csv'
+
+            if not interstate_file.exists():
+                print(f"    interstate.csv not found at {interstate_file} — skipping state export competitiveness")
+                return
+
+            interstate_df = pd.read_csv(interstate_file)
+            competitiveness = self.state_analyzer.analyze_export_competitiveness(interstate_df)
+
+            if not competitiveness.empty:
                 output_path = trade_file.parent
                 output_path.mkdir(parents=True, exist_ok=True)
-                competitiveness.to_csv(output_path / 'export_competitiveness.csv', index=False)
-                
-                print(f"    Created US export competitiveness analysis")
-            else:
-                print(f"    Export trade file not found: {trade_file}")
+                competitiveness.to_csv(output_path / 'export_competitiveness_state.csv', index=False)
+                print(f"    ✅ Created export_competitiveness_state.csv ({len(competitiveness)} rows)")
         except Exception as e:
-            print(f"    Error in export competitiveness analysis: {e}")
+            print(f"    Error in state export competitiveness analysis: {e}")
         finally:
-            # Restore original config
             self.config['TRADEFLOW'] = original_tradeflow
-    
+
     def _analyze_import_dependency(self):
-        """Analyze US import dependency and vulnerabilities"""
-        print("  Analyzing US import dependencies...")
-        
-        # Update config for current tradeflow
+        """State import dependency from domestic interstate.csv (region2=destination state)."""
+        print("  Analyzing US state import dependency from interstate data...")
+
         original_tradeflow = self.config['TRADEFLOW']
-        self.config['TRADEFLOW'] = self.current_tradeflow
-        
+        self.config['TRADEFLOW'] = 'domestic'
+
         try:
-            # Load import trade data
-            trade_file_str = get_file_path(self.config, 'industryflow')
-            trade_file = Path(trade_file_str)
-            
-            if trade_file.exists():
-                import_trade = pd.read_csv(trade_file)
-                
-                # Use US state analyzer for dependency analysis
-                bea_data = getattr(self, 'bea_imports_data', pd.DataFrame())
-                dependency = self.state_analyzer.analyze_import_dependency(
-                    import_trade, bea_data
-                )
-                
-                # Save results
+            trade_file = Path(get_file_path(self.config, 'industryflow'))
+            interstate_file = trade_file.parent / 'interstate.csv'
+
+            if not interstate_file.exists():
+                print(f"    interstate.csv not found at {interstate_file} — skipping state import dependency")
+                return
+
+            interstate_df = pd.read_csv(interstate_file)
+            dependency = self.state_analyzer.analyze_import_dependency(interstate_df)
+
+            if not dependency.empty:
                 output_path = trade_file.parent
                 output_path.mkdir(parents=True, exist_ok=True)
-                dependency.to_csv(output_path / 'import_dependency.csv', index=False)
+                dependency.to_csv(output_path / 'import_dependency_state.csv', index=False)
                 
-                print(f"    Created US import dependency analysis")
-            else:
-                print(f"    Import trade file not found: {trade_file}")
+                print(f"    ✅ Created import_dependency_state.csv ({len(dependency)} rows)")
         except Exception as e:
-            print(f"    Error in import dependency analysis: {e}")
+            print(f"    Error in state import dependency analysis: {e}")
         finally:
-            # Restore original config
             self.config['TRADEFLOW'] = original_tradeflow
     
     def _integrate_fedefl_flows(self):
@@ -733,14 +736,16 @@ class USBEATradeFlow:
 def main():
     parser = argparse.ArgumentParser(description='US-BEA Enhanced Trade Flow Analysis with optimization')
     parser.add_argument('--bea-key', help='BEA API key (or use .env file)')
-    parser.add_argument('--force-regen', action='store_true', 
+    parser.add_argument('--force-regen', action='store_true',
                        help='Force regeneration of trade.csv files even if they exist')
+    parser.add_argument('--use-bea-placeholder', action='store_true',
+                       help='Use hardcoded placeholder weights for state disaggregation when BEA data is unavailable')
     
     args = parser.parse_args()
     
     try:
         print("Initializing US-BEA Trade Flow Analysis...")
-        processor = USBEATradeFlow(bea_api_key=args.bea_key, force_regeneration=args.force_regen)
+        processor = USBEATradeFlow(bea_api_key=args.bea_key, force_regeneration=args.force_regen, use_bea_placeholder=args.use_bea_placeholder)
         processor.process_all_tradeflows()
         
     except Exception as e:

@@ -160,7 +160,8 @@ def run_country_processing(country, tradeflow, batch_start_time, batch_timeout=1
     scripts = [
         'trade.py',
         'trade_impact.py',
-        'trade_resource.py'
+        'trade_resource.py',
+        'trade_competitiveness.py',
     ]
     
     success_count = 0
